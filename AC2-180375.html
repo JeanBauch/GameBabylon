@@ -213,7 +213,7 @@
                   if(proximoItem) {
                     switch(indiceOrdemColeta) {
                       case 0:
-                        mensagemEmTela = "Colete a nave especial";
+                        mensagemEmTela = "Colete o coelho loco";
                         break;
                       case 1:
                         mensagemEmTela = "Colete o dragao de komodo";
@@ -426,8 +426,8 @@
         const criarTodosItens = function (scene) {
           var payload = [{
             id: 0,
-            url: "assets/scene/",
-            name: "ufo.glb",
+            url: "https://playground.babylonjs.com/scenes/",
+            name: "Rabbit.babylon",
             x: -22,
             z: -39,
             y: -50
@@ -496,7 +496,7 @@
             y: -48
           }];
         
-          criarItem(payload[0], "ufo.glb", "assets/scene/", 6, scene);
+          criarItem(payload[0], "Rabbit.babylon", "https://playground.babylonjs.com/scenes/", 0.1, scene);
           criarItem(payload[1], "dragon.babylon", "https://models.babylonjs.com/Georgia-Tech-Dragon/", 26, scene);
           criarItem(payload[2], "aerobatic_plane.glb", "https://models.babylonjs.com/", 26, scene);
           criarItem(payload[3], "alien.glb", "https://models.babylonjs.com/", 6, scene);
