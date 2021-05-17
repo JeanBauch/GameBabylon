@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://code.jquery.com/pep/0.4.2/pep.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://preview.babylonjs.com/ammo.js"></script>
+        <script src="https://preview.babylonjs.com/cannon.js"></script>
+        <script src="https://preview.babylonjs.com/Oimo.js"></script>
+        
+        <script src="https://preview.babylonjs.com/earcut.min.js"></script>
+        <script src="https://preview.babylonjs.com/babylon.js"></script>
+        <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+        <script src="https://preview.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://preview.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://preview.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://preview.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://preview.babylonjs.com/gui/babylon.gui.min.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+    </head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+        
+        var listItens;
+        var posItems = [
+          { x:"18",z:" 5"},
+          { x:"-18",z:" 5"},
+          { x:"-4",z:" 9"},
+          { x:"4",z:" 9"},
+          { x:"-16", z:"-18"},
+          { x:"16",z:" -18"},
+          { x:"-12",z:"-4"},
+          { x:"12",z:" -4"},
+          { x:"-2",z:" -17"},
+          { x:"2", z:"-17"}
+        ];
+        var ultimoIndice = posItems.length - 1;
+        var barrils = [];
+        var indiceOrdemColeta = 0;
+        var advancedTexture;
+        var advancedTextureInstructions;
+        var proximoItem = true;
+        var itensRestantes = 10;
+        
+
+        var createScene = function() {
+            var scene = new BABYLON.Scene(engine);
+            var camera = new BABYLON.ArcRotateCamera("Camera", - Math.PI / 2, Math.PI / 4, -1, new BABYLON.Vector3(0,-50,-20), scene);
+            camera.lowerRadiusLimit = 20;
+            camera.upperRadiusLimit = 100;
+            camera.attachControl(canvas, true);
+        	
+        	  var light1 = new BABYLON.DirectionalLight("DirectionalLight", new BABYLON.Vector3(0, -1, 1), scene);
+            var light2 = new BABYLON.HemisphericLight("HemiLight", new BABYLON.Vector3(0, 1, 0), scene);   
+            light1.intensity = 0.75;
+            light2.intensity = 0.5;
+
+            criarHUD();
+            var ground = criarChao(scene);
+            createSkyBox();
+            criarPersonagem(camera, scene, ground);
+
+            for(let i=0; i<10; i++)
+              criarBarril(i, scene);
+
+            criarTodosItens(scene);
+
+            scene.registerBeforeRender(function () {
+              var hero = scene.getMeshByID("hero");
+
+              for(let i=0; i<10; i++) {
+                var barril = scene.getMeshByID(`barril${i}`);
+
+                if(hero) {
+                  if(barril) {
+                    var barrilProx = barril.getChildren();
+                    var barrilHitBox = barrilProx[2];
+
+                    if(hero.intersectsMesh(barrilHitBox, true) && barril._isEnabled) {
+                      const barrelPosX = barril.position.x;
+                      const barrelPosZ = barril.position.z;
+                      ExplodirBarril(barril, barrilHitBox);
+                      criarParticula(barril, scene);
+                      barril.setEnabled(false);
+                      barril.isVisible = false;
+                    }
+                  }
+                }
+              }
+            })
+
+        	return scene;
+        };
+
+        const criarHUD = function () {
+          var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+          var instrucoes = stylesUI(
+              "Jean Augusto Bauch - 180375", BABYLON.GUI
+              .Control
+              .HORIZONTAL_ALIGNMENT_CENTER, BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP);
+
+          advancedTexture.addControl(instrucoes);
+        }
+
+        const stylesUI = function (texto, horizontal, vertical) {
+          var instrucoes = new BABYLON.GUI.TextBlock();
+          instrucoes.text = texto;
+          instrucoes.color = "purple";
+          instrucoes.fontSize = 32;
+          instrucoes.textHorizontalAlignment = horizontal;
+          instrucoes.textVerticalAlignment = vertical;
+          return instrucoes;
+        }
+
+        var criarChao = function(scene) {
+          const ground = new BABYLON.StandardMaterial("largeGroundMat");
+          ground.diffuseTexture = new BABYLON.Texture("/assets/textures/skybox4_ny_ground.jpg");
+
+          const groundLarger = BABYLON.MeshBuilder.CreateGroundFromHeightMap("ground", "/assets/textures/groundHeight.png", {
+            width: 180,
+            height: 180,
+            subdivisions: 100,
+            minHeight: 0,
+            maxHeight: 10
+          });
+          groundLarger.material = ground;
+          groundLarger.position.y -= 50;
+          return groundLarger;
+        }
+
+        var createSkyBox = function(){
+          
+          var skybox = BABYLON.MeshBuilder.CreateBox("skybox", 
+            {
+              size: 200
+            },
+            scene
+          );
+          var skyboxMaterial = new BABYLON.StandardMaterial("skybox",scene);
+
+          skyboxMaterial.backFaceCulling = false;
+          skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("/assets/textures/skybox4", scene);
+          skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+          skyboxMaterial.disableLighting = true;
+          skybox.material = skyboxMaterial;
+        }
+
+        var criarPersonagem = function(defaultCamera, scene, ground){
+          // Keyboard events
+          var inputMap = {};
+          scene.actionManager = new BABYLON.ActionManager(scene);
+          scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyDownTrigger, function (evt) {
+              inputMap[evt.sourceEvent.key] = evt.sourceEvent.type == "keydown";
+          }));
+          scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyUpTrigger, function (evt) {
+              inputMap[evt.sourceEvent.key] = evt.sourceEvent.type == "keydown";
+          }));
+
+          BABYLON.SceneLoader.ImportMesh("", "https://assets.babylonjs.com/meshes/", "HVGirl.glb", scene, function (newMeshes, particleSystems, skeletons, animationGroups) {
+              var hero = newMeshes[0];
+              hero.id = "hero";
+              hero.scaling.scaleInPlace(0.25);
+              hero.position.y-=50;
+
+              defaultCamera.target = hero;
+
+              var heroSpeed = 0.2;
+              var heroSpeedBackwards = 0.2;
+              var heroRotationSpeed = 0.05;
+
+              var animating = true;
+
+              const walkAnim = scene.getAnimationGroupByName("Walking");
+              const walkBackAnim = scene.getAnimationGroupByName("WalkingBack");
+              const idleAnim = scene.getAnimationGroupByName("Idle");
+              const sambaAnim = scene.getAnimationGroupByName("Samba");
+
+              scene.onBeforeRenderObservable.add(() => {
+                  var keydown = false;
+                  var samba = false;
+                  var existeItensEmTela = true;
+                  var itemC = "";
+                  if(proximoItem) {
+                    switch(indiceOrdemColeta) {
+                      case 0:
+                        mensagemEmTela = "Colete a nave especial";
+                        break;
+                      case 1:
+                        mensagemEmTela = "Colete o dragao de komodo";
+                        break;
+                      case 2:
+                        mensagemEmTela = "Colete o aviao zero bala";
+                        break;
+                      case 3:
+                        mensagemEmTela = "Colete o alien";
+                        break;
+                      case 4:
+                        mensagemEmTela = "Colete a caveira";
+                        break;
+                      case 5:
+                        mensagemEmTela = "Colete o tubarao";
+                        break;
+                      case 6:
+                        mensagemEmTela = "Colete o ventilador";
+                        break;
+                      case 7:
+                        mensagemEmTela = "Colete o carrinho de lego";
+                        break;
+                      case 8:
+                        mensagemEmTela = "Colete a estatua de homem";
+                        break;
+                      case 9:
+                        mensagemEmTela = "Colete o radio JBL v1.0";
+                        break;
+                      case 10:
+                        mensagemEmTela = "";
+                        break;
+                    }
+                    itemC = indiceOrdemColeta + 1;
+                    var msg = itemC + ". " + mensagemEmTela;
+                    
+                    if(indiceOrdemColeta >= 10) {
+                      msg = "Fim de jogo! Aperte R para reiniciar!";
+                      existeItensEmTela = false;
+                    }
+                    
+                    criarHUDInstrucoes(msg);
+                    criarHUDItens(msg);
+                    proximoItem = false;
+                  }
+                  
+                  if ( (inputMap["w"] || inputMap["W"]) && existeItensEmTela) {
+                    hero.moveWithCollisions(hero.forward.scaleInPlace(heroSpeed));
+                    keydown = true;
+                    walked = true;
+                  }
+                  if ((inputMap["s"] || inputMap["S"]) && existeItensEmTela) {
+                    // if(isValidPosition(hero,-heroSpeedBackwards)) {
+                    //     return;
+                    // }
+                    hero.moveWithCollisions(hero.forward.scaleInPlace(-heroSpeedBackwards));
+                    keydown = true;
+                    walked = true;
+                  }
+                  if ((inputMap["a"] || inputMap["A"]) && existeItensEmTela) {
+                    hero.rotate(BABYLON.Vector3.Up(), -heroRotationSpeed);
+                    keydown = true;
+                    walked = true;
+                  }
+                  if ((inputMap["d"] || inputMap["D"]) && existeItensEmTela) {
+                    hero.rotate(BABYLON.Vector3.Up(), heroRotationSpeed);
+                    keydown = true;
+                    walked = true;
+                  }
+
+                  if (inputMap["r"] || inputMap["R"] && indexOrderCollectable == 10) {
+                    window.location.reload();
+                  }
+
+                  if(!existeItensEmTela) {
+                    keydown = true;
+                    animating = false;
+
+                    if(keydown) {
+                      if(!animating) {
+                        animating = true;
+                        sambaAnim.start(true, 1.0, sambaAnim.from, sambaAnim.to, false);
+                        const bounce = new BABYLON.Sound("bounce", "./assets/sounds/musicaFinal.mp3", scene, null, { loop: true, autoplay: true });
+                      }
+                    }
+                  }
+                  // if(score >= 10) {
+                  //     keydown = false;
+                  //     music.stop();
+                  //     sambaAnim.start(true, 1.0, sambaAnim.from, sambaAnim.to, false);
+                  //     if (inputMap["f"] || inputMap["F"]) {
+                  //         victory.stop();
+                  //         advancedTextureM.dispose();
+
+                  //         sambaAnim.stop();
+                          
+                  //         hero.position.x=0;
+                  //         hero.position.z=0;
+
+                  //         score = 0;
+                  //         resetScene(scene);
+                  //     }
+                  // }
+
+                  if (keydown) {
+                      if (!animating) {
+                          animating = true;
+                          if (inputMap["s"] || inputMap["S"]) {
+                              walkBackAnim.start(true, 1.0, walkBackAnim.from, walkBackAnim.to, false);
+                          }
+                          else if
+                              (inputMap["b"] || inputMap["B"]) {
+                              sambaAnim.start(true, 1.0, sambaAnim.from, sambaAnim.to, false);
+                          }
+                          else {
+                              walkAnim.start(true, 1.0, walkAnim.from, walkAnim.to, false);
+                          }
+                      }
+                  }
+                  else {
+
+                      if (animating) {  
+                          idleAnim.start(true, 1.0, idleAnim.from, idleAnim.to, false);
+
+                          // if(score < 10) {
+                          //     sambaAnim.stop();
+                          // }
+                          
+                          walkAnim.stop();
+                          walkBackAnim.stop();
+
+                          animating = false;
+                      }
+                  }
+
+              });
+          });
+      }
+        
+        const validPositionCharacter = (hero, heroSpeed) => {
+          const forward = hero.forward.scaleInPlace(heroSpeed);
+
+          // const zNegative = forward.z < 0 ? -1 : 1;
+          // const xNegative = forward.x < 0 ? -1 : 1;
+      
+          // const nextHeroPositionZ = hero.position.z + heroSpeed * zNegative;
+          // const nextHeroPositionX = hero.position.x + heroSpeed * xNegative;
+      
+          // const heroRadius = Math.sqrt(Math.pow(nextHeroPositionX,2) + Math.pow(nextHeroPositionZ,2));
+          // return heroRadius >= 36.2;
+        }
+        
+        var criarBarril = function(id, scene) {
+          BABYLON.SceneLoader.ImportMesh("","https://models.babylonjs.com/", "ExplodingBarrel.glb", scene,
+          
+          function (itensMeshes) {
+            const barril = new BABYLON.Mesh(`barril${id}`, scene);
+            itensMeshes.forEach(item => {
+              item.setParent(barril);
+              barril.addChild(item);
+            });
+
+            barril.scaling.x = 0.05;
+            barril.scaling.y = 0.05;
+            barril.scaling.z = 0.05;
+
+            posicaoItemSelecionado = posItems[ultimoIndice];
+            ultimoIndice--;
+
+            barril.position.x = posicaoItemSelecionado.x;
+            barril.position.z = posicaoItemSelecionado.z;
+            barril.position.y = -50;
+
+            const hitBoxBarril = `cylinder${posicaoItemSelecionado.x}${posicaoItemSelecionado.z}`;
+            const corpoHitBoxBarril = BABYLON.MeshBuilder.CreateCylinder(`cylinder${posicaoItemSelecionado.x}${posicaoItemSelecionado.z}`, {} ); 
+
+            corpoHitBoxBarril.position.x = posicaoItemSelecionado.x;
+            corpoHitBoxBarril.position.z = posicaoItemSelecionado.z;
+            corpoHitBoxBarril.scaling.scaleInPlace(6);
+            corpoHitBoxBarril.isVisible = false;
+
+            barrils.push(barril);
+
+            var explodir = false;
+          });    
+        }
+
+        const ExplodirBarril = function (barril, hitBox) {
+          var vetorPosicao = barril.position;
+          
+          const bounce = new BABYLON.Sound("bounce", "./assets/sounds/barulho_explosao.mp3", scene, null, { loop: false, autoplay: true });
+          console.log("som de explosao");
+
+          barril.dispose();
+          hitBox.dispose();
+        }
+
+        const criarParticula = function (vetorPos, scene) {
+          var count = 0;
+          const barrilPosX = vetorPos.position.x;
+          const barrilPosZ = vetorPos.position.z;
+          const barrilPosY = vetorPos.position.y;
+
+          BABYLON.ParticleHelper.CreateAsync("fire", scene)
+            .then( (set) => {
+              set.systems.forEach( s => {
+                s.emitter.x = barrilPosX;
+                s.emitter.z = barrilPosZ;
+                s.emitter.y = -50;
+                s.disposeOnStop = true;
+              });
+              set.start();
+            });
+          
+          BABYLON.ParticleHelper.CreateAsync("explosion", scene)
+            .then( (set) => {
+              set.systems.forEach( s => {
+                s.emitter.x = barrilPosX;
+                s.emitter.z = barrilPosZ;
+                s.emitter.y = -50;
+                s.disposeOnStop = true;
+              });
+              set.start();
+            });
+        }
+
+        const criarTodosItens = function (scene) {
+          var payload = [{
+            id: 0,
+            url: "assets/scene/",
+            name: "ufo.glb",
+            x: -22,
+            z: -39,
+            y: -50
+          }, {
+            id: 1,
+            url: "https://models.babylonjs.com/Georgia-Tech-Dragon/",
+            name: "dragon.babylon",
+            x: -39,
+            z: 3,
+            y: -50
+          }, {
+            id: 2,
+            url: "https://models.babylonjs.com/",
+            name: "aerobatic_plane.glb",
+            x: -30,
+            z: 3,
+            y: -50
+          }, {
+            id: 3,
+            url: "https://models.babylonjs.com/",
+            name: "alien.glb",
+            x: 33,
+            z: -15,
+            y: -47
+          }, {
+            id: 4,
+            url: "assets/scene/",
+            name: "skull.babylon",
+            x: 18,
+            z: 20,
+            y: -48
+          }, {
+            id: 5,
+            url: "https://models.babylonjs.com/",
+            name: "shark.glb",
+            x: 38,
+            z: 20,
+            y: -50
+          }, {
+            id: 6,
+            url: "https://models.babylonjs.com/vintageDeskFan/",
+            name: "vintageFan_animated.gltf",
+            x: 12,
+            z: -22,
+            y: -50
+          }, {
+            id: 7,
+            url: "https://playground.babylonjs.com/scenes/Buggy/glTF-Draco/",
+            name: "Buggy.gltf",
+            x: 22,
+            z: -18,
+            y: -50
+          }, {
+            id: 8,
+            url: "assets/scene/",
+            name: "Dude.babylon",
+            x: 0,
+            z: -20,
+            y: -50
+          }, {
+            id: 9,
+            url: "assets/scene/",
+            name: "BoomBox.glb",
+            x: 0,
+            z: 30,
+            y: -48
+          }];
+        
+          criarItem(payload[0], "ufo.glb", "assets/scene/", 6, scene);
+          criarItem(payload[1], "dragon.babylon", "https://models.babylonjs.com/Georgia-Tech-Dragon/", 26, scene);
+          criarItem(payload[2], "aerobatic_plane.glb", "https://models.babylonjs.com/", 26, scene);
+          criarItem(payload[3], "alien.glb", "https://models.babylonjs.com/", 6, scene);
+          criarItem(payload[4], "skull.babylon", "assets/scene/", 0.08, scene);
+          criarItem(payload[5], "shark.glb", "https://models.babylonjs.com/", 0.5, scene);
+          criarItem(payload[6], "vintageFan_animated.gltf", "https://models.babylonjs.com/vintageDeskFan/", 0.08, scene);
+          criarItem(payload[7], "Buggy.gltf", "https://playground.babylonjs.com/scenes/Buggy/glTF-Draco/", 0.05, scene); 
+          criarItem(payload[8], "Dude.babylon", "assets/scene/", 0.09, scene); 
+          criarItem(payload[9], "BoomBox.glb", "assets/scene/", 180, scene); 
+        }
+
+        const criarItem = function (payload, name, url, escala, scene) {
+          BABYLON.SceneLoader.ImportMesh("", payload.url, payload.name, scene, function (meshes) {
+            const item = meshes[0];
+            item.position.x = payload.x;
+            item.position.z = payload.z;
+            item.position.y = payload.y;
+            item.scaling.scaleInPlace(escala);
+
+            const itemHitBox = BABYLON.MeshBuilder.CreateCylinder(
+              `itemHitBox${payload.x}${payload.z}`, {} );
+            
+            itemHitBox.position.x = payload.x;
+            itemHitBox.position.z = payload.z;
+            itemHitBox.position.y = -50;
+            itemHitBox.scaling.scaleInPlace(4);
+            itemHitBox.isVisible = false;
+
+            var coletado = false;
+            scene.onBeforeRenderObservable.add(() => {
+              var hero = scene.getMeshByID("hero");
+              
+              if (!coletado) {
+                if (itemHitBox.intersectsMesh(hero, true)) {
+                  coletado = acaoDeColeta(item, itemHitBox, payload.id, scene);
+                }
+              }
+            })
+          })
+        }
+
+        const acaoDeColeta = function (item, itemHitBox, id, scene) {
+          var ordem = [0,1,2,3,4,5,6,7,8,9];
+
+          if(ordem[indiceOrdemColeta] == id) {
+            const bounce = new BABYLON.Sound("bounce", "./assets/sounds/inceptionbutton.mp3", scene, null, { loop: false, autoplay: true });
+            console.log("coletou!");
+            itensRestantes--;
+            indiceOrdemColeta++;
+
+            proximoItem = true;
+            item.dispose();
+            itemHitBox.dispose();
+            return true;
+          }
+          console.log("resetou!");
+          return false;
+        }
+
+        const criarHUDItens = function () {
+          
+          if (advancedTexture) {
+            advancedTexture.dispose();
+          }
+          advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+          var topPanelD = new BABYLON.GUI.StackPanel();
+          topPanelD.width = "350px";
+          topPanelD.isVertical = true;
+          topPanelD.paddingLeft = "20px";
+          topPanelD.paddingTop = "40px";
+          topPanelD.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+          topPanelD.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+          topPanelD.fontSize = 20;
+          advancedTexture.addControl(topPanelD);
+          
+          var addHeader = function (text, panel, alinhamento) {
+            var header = new BABYLON.GUI.TextBlock();
+            header.text = text;
+            header.height = "30px";
+            header.color = "white";
+            header.outlineWidth = "4px";
+            header.outlineColor = "black";
+            header.textHorizontalAlignment = alinhamento;
+
+            panel.addControl(header);
+          }
+          var alinhamentoCentro = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+          addHeader(indiceOrdemColeta + "/10", topPanelD, alinhamentoCentro);
+          return advancedTexture;
+        }
+
+        const criarHUDInstrucoes = function (msg) {
+          if (advancedTextureInstructions) {
+            advancedTextureInstructions.dispose();
+          }
+
+          advancedTextureInstructions = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+          var topPanelD = new BABYLON.GUI.StackPanel();
+          topPanelD.width = "650px";
+          topPanelD.isVertical = true;
+          topPanelD.paddingLeft = "20px";
+          topPanelD.paddingTop = "80px";
+          topPanelD.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+          topPanelD.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+          topPanelD.fontSize = 30;
+          advancedTextureInstructions.addControl(topPanelD);
+
+          var addHeader = function (text, panel, alinhamento) {
+            var header = new BABYLON.GUI.TextBlock();
+            header.text = text;
+            header.height = "30px";
+            header.color = "black";
+            header.outlineWidth = "4px";
+            header.outlineColor = "black";
+            header.textHorizontalAlignment = alinhamento;
+
+            panel.addControl(header);
+          }
+
+          var alinhamentoCentro = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+          addHeader(msg, topPanelD, alinhamentoCentro);
+          return advancedTextureInstructions;
+        }
+
+        var engine;
+        var scene;
+        initFunction = async function() {               
+            var asyncEngineCreation = async function() {
+                try {
+                return createDefaultEngine();
+                } catch(e) {
+                console.log("the available createEngine function failed. Creating the default engine instead");
+                return createDefaultEngine();
+                }
+            }
+
+            engine = await asyncEngineCreation();
+        if (!engine) throw 'engine should not be null.';
+        scene = createScene();};
+        initFunction().then(() => {sceneToRender = scene        
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
