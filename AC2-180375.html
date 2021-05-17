@@ -67,7 +67,9 @@
         var advancedTextureInstructions;
         var proximoItem = true;
         var itensRestantes = 10;
-        
+        var andou = false;
+        var existeItensEmTela = true;
+        var musicaFinal = true;
 
         var createScene = function() {
             var scene = new BABYLON.Scene(engine);
@@ -92,27 +94,29 @@
             criarTodosItens(scene);
 
             scene.registerBeforeRender(function () {
-              var hero = scene.getMeshByID("hero");
+              if(andou){
+                var hero = scene.getMeshByID("hero");
 
-              for(let i=0; i<10; i++) {
-                var barril = scene.getMeshByID(`barril${i}`);
+                for(let i=0; i<10; i++) {
+                  var barril = scene.getMeshByID(`barril${i}`);
 
-                if(hero) {
-                  if(barril) {
-                    var barrilProx = barril.getChildren();
-                    var barrilHitBox = barrilProx[2];
+                  if(hero) {
+                    if(barril) {
+                      var barrilProx = barril.getChildren();
+                      var barrilHitBox = barrilProx[2];
 
-                    if(hero.intersectsMesh(barrilHitBox, true) && barril._isEnabled) {
-                      const barrelPosX = barril.position.x;
-                      const barrelPosZ = barril.position.z;
-                      ExplodirBarril(barril, barrilHitBox);
-                      criarParticula(barril, scene);
-                      barril.setEnabled(false);
-                      barril.isVisible = false;
+                      if(hero.intersectsMesh(barrilHitBox, true) && barril._isEnabled) {
+                        const barrelPosX = barril.position.x;
+                        const barrelPosZ = barril.position.z;
+                        ExplodirBarril(barril, barrilHitBox);
+                        criarParticula(barril, scene);
+                        barril.setEnabled(false);
+                        barril.isVisible = false;
+                      }
                     }
                   }
                 }
-              }
+                }
             })
 
         	return scene;
@@ -122,7 +126,7 @@
           var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
           var instrucoes = stylesUI(
-              "Jean Augusto Bauch - 180375", BABYLON.GUI
+              "Jean Augusto Bauch - 180375 - Aperte F5 caso trave no load", BABYLON.GUI
               .Control
               .HORIZONTAL_ALIGNMENT_CENTER, BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP);
 
@@ -133,7 +137,7 @@
           var instrucoes = new BABYLON.GUI.TextBlock();
           instrucoes.text = texto;
           instrucoes.color = "purple";
-          instrucoes.fontSize = 32;
+          instrucoes.fontSize = 24;
           instrucoes.textHorizontalAlignment = horizontal;
           instrucoes.textVerticalAlignment = vertical;
           return instrucoes;
@@ -205,7 +209,6 @@
               scene.onBeforeRenderObservable.add(() => {
                   var keydown = false;
                   var samba = false;
-                  var existeItensEmTela = true;
                   var itemC = "";
                   if(proximoItem) {
                     switch(indiceOrdemColeta) {
@@ -247,8 +250,8 @@
                     var msg = itemC + ". " + mensagemEmTela;
                     
                     if(indiceOrdemColeta >= 10) {
-                      msg = "Fim de jogo! Aperte R para reiniciar!";
                       existeItensEmTela = false;
+                      msg = "Fim de jogo! Aperte R para reiniciar!";
                     }
                     
                     criarHUDInstrucoes(msg);
@@ -257,14 +260,14 @@
                   }
                   
                   if ( (inputMap["w"] || inputMap["W"]) && existeItensEmTela) {
+                    andou = true;
                     hero.moveWithCollisions(hero.forward.scaleInPlace(heroSpeed));
                     keydown = true;
                     walked = true;
+                    console.log(existeItensEmTela);
                   }
                   if ((inputMap["s"] || inputMap["S"]) && existeItensEmTela) {
-                    // if(isValidPosition(hero,-heroSpeedBackwards)) {
-                    //     return;
-                    // }
+                    andou = true;
                     hero.moveWithCollisions(hero.forward.scaleInPlace(-heroSpeedBackwards));
                     keydown = true;
                     walked = true;
@@ -285,6 +288,10 @@
                   }
 
                   if(!existeItensEmTela) {
+                    if(musicaFinal) {
+                      const bounce = new BABYLON.Sound("bounce", "./assets/sounds/musicaFinal.mp3", scene, null, { loop: true, autoplay: true });
+                      musicaFinal = false;
+                    }
                     keydown = true;
                     animating = false;
 
@@ -292,27 +299,9 @@
                       if(!animating) {
                         animating = true;
                         sambaAnim.start(true, 1.0, sambaAnim.from, sambaAnim.to, false);
-                        const bounce = new BABYLON.Sound("bounce", "./assets/sounds/musicaFinal.mp3", scene, null, { loop: true, autoplay: true });
                       }
                     }
                   }
-                  // if(score >= 10) {
-                  //     keydown = false;
-                  //     music.stop();
-                  //     sambaAnim.start(true, 1.0, sambaAnim.from, sambaAnim.to, false);
-                  //     if (inputMap["f"] || inputMap["F"]) {
-                  //         victory.stop();
-                  //         advancedTextureM.dispose();
-
-                  //         sambaAnim.stop();
-                          
-                  //         hero.position.x=0;
-                  //         hero.position.z=0;
-
-                  //         score = 0;
-                  //         resetScene(scene);
-                  //     }
-                  // }
 
                   if (keydown) {
                       if (!animating) {
@@ -333,10 +322,6 @@
 
                       if (animating) {  
                           idleAnim.start(true, 1.0, idleAnim.from, idleAnim.to, false);
-
-                          // if(score < 10) {
-                          //     sambaAnim.stop();
-                          // }
                           
                           walkAnim.stop();
                           walkBackAnim.stop();
@@ -349,17 +334,16 @@
           });
       }
         
-        const validPositionCharacter = (hero, heroSpeed) => {
+        const estaDentroDaArea = (hero,heroSpeed) => {
           const forward = hero.forward.scaleInPlace(heroSpeed);
-
-          // const zNegative = forward.z < 0 ? -1 : 1;
-          // const xNegative = forward.x < 0 ? -1 : 1;
+          const zNegative = forward.z < 0 ? -1 : 1;
+          const xNegative = forward.x < 0 ? -1 : 1;
       
-          // const nextHeroPositionZ = hero.position.z + heroSpeed * zNegative;
-          // const nextHeroPositionX = hero.position.x + heroSpeed * xNegative;
+          const nextHeroPositionZ = hero.position.z + heroSpeed * zNegative;
+          const nextHeroPositionX = hero.position.x + heroSpeed * xNegative;
       
-          // const heroRadius = Math.sqrt(Math.pow(nextHeroPositionX,2) + Math.pow(nextHeroPositionZ,2));
-          // return heroRadius >= 36.2;
+          const heroRadius = Math.sqrt(Math.pow(nextHeroPositionX,2) + Math.pow(nextHeroPositionZ,2));
+          return heroRadius >= 65;
         }
         
         var criarBarril = function(id, scene) {
