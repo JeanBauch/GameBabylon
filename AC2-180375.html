@@ -260,13 +260,16 @@
                   }
                   
                   if ( (inputMap["w"] || inputMap["W"]) && existeItensEmTela) {
+                    if(estaDentroDaArea(hero,heroSpeed))
+                      return
                     andou = true;
                     hero.moveWithCollisions(hero.forward.scaleInPlace(heroSpeed));
                     keydown = true;
                     walked = true;
-                    console.log(existeItensEmTela);
                   }
                   if ((inputMap["s"] || inputMap["S"]) && existeItensEmTela) {
+                    if(estaDentroDaArea(hero,heroSpeed))
+                      return
                     andou = true;
                     hero.moveWithCollisions(hero.forward.scaleInPlace(-heroSpeedBackwards));
                     keydown = true;
@@ -283,7 +286,7 @@
                     walked = true;
                   }
 
-                  if (inputMap["r"] || inputMap["R"] && indexOrderCollectable == 10) {
+                  if ((inputMap["r"] || inputMap["R"]) && !existeItensEmTela) {
                     window.location.reload();
                   }
 
@@ -526,7 +529,7 @@
             scene.onBeforeRenderObservable.add(() => {
               var hero = scene.getMeshByID("hero");
               
-              if (!coletado) {
+              if (!coletado && hero) {
                 if (itemHitBox.intersectsMesh(hero, true)) {
                   coletado = acaoDeColeta(item, itemHitBox, payload.id, scene);
                 }
